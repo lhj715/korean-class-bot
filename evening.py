@@ -153,6 +153,28 @@ def main():
 
     message = f"매일국어\n[저녁 국어] {date_str} 문학 자료\n\n{summary}"
     send_telegram(message)
+
+    # 하네스 브리핑 업데이트
+    briefing = {
+        "project": "gookeo",
+        "role": "저녁",
+        "updated_at": now.strftime("%Y-%m-%d"),
+        "done_today": f"- 문학 자료 발송 완료 ({now.strftime('%Y-%m-%d %H:%M KST')})\n- 작품: {target['title'][:40]}",
+        "todo": "- 내일 저녁 8시 자동 발송 예정",
+        "analysis": {
+            "title": "저녁 문학 자료 발송 현황",
+            "question": "블로그 크롤링 및 요약이 정상 작동하는가?",
+            "recommendation": "Gemini flash-lite-latest로 요약 생성 중. 품질 모니터링 필요.",
+            "items": [{"rank": 1, "type": "발송 정상", "score": "★★★★★", "reason": "네이버 블로그 크롤링 + Gemini 요약 + 텔레그램 발송 완료", "data_source": "evening.py", "risk": "없음"}],
+            "next_action": "블로그 신규 포스트 모니터링"
+        },
+        "notes": f"블로그: blog.naver.com/9594jh | 문학 포스트: {len(lit_posts)}/50개"
+    }
+    briefing_path = Path("/home/ubuntu/harness/briefings/gookeo_저녁.json")
+    if briefing_path.parent.exists():
+        import json as _json
+        briefing_path.write_text(_json.dumps(briefing, ensure_ascii=False, indent=2))
+
     print(f"[완료] 발송")
 
 

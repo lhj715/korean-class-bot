@@ -76,6 +76,28 @@ def main():
 
     progress["morning_index"] = (idx + 3) % total
     save_progress(progress)
+
+    # 하네스 브리핑 업데이트
+    briefing = {
+        "project": "gookeo",
+        "role": "아침",
+        "updated_at": now.strftime("%Y-%m-%d"),
+        "done_today": f"- 고사성어 3개 발송 완료 ({now.strftime('%Y-%m-%d %H:%M KST')})\n- 발송 항목: {', '.join(i['word'] for i in items)}",
+        "todo": "- 내일 아침 7시 자동 발송 예정",
+        "analysis": {
+            "title": "아침 고사성어 발송 현황",
+            "question": "고사성어 데이터가 충분한가?",
+            "recommendation": f"현재 {total}개 수집 완료. 3개씩 발송 시 {total//3}일치.",
+            "items": [{"rank": 1, "type": "발송 정상", "score": "★★★★★", "reason": "텔레그램 채널 발송 완료", "data_source": "morning.py", "risk": "없음"}],
+            "next_action": "고사성어 추가 수집 필요 시 fetch_gosaseongeo.py 재실행"
+        },
+        "notes": f"총 {total}개 수집 / 진행: {idx+3}번째"
+    }
+    briefing_path = Path("/home/ubuntu/harness/briefings/gookeo_아침.json")
+    if briefing_path.parent.exists():
+        import json as _json
+        briefing_path.write_text(_json.dumps(briefing, ensure_ascii=False, indent=2))
+
     print(f"[완료] {idx}~{idx+2}번 발송")
 
 
