@@ -219,7 +219,7 @@ def main():
         import json as _json
         briefing_path.write_text(_json.dumps(briefing, ensure_ascii=False, indent=2))
 
-    print(f"[완료] 발송")
+    print(f"[완료] {now.strftime('%Y-%m-%d %H:%M KST')} 발송")
 
 
 if __name__ == "__main__":

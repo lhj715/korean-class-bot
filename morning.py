@@ -160,7 +160,7 @@ def main():
             json.dumps(briefing, ensure_ascii=False, indent=2)
         )
 
-    print(f"[완료] 발송: {', '.join(words)}")
+    print(f"[완료] {now.strftime('%Y-%m-%d %H:%M KST')} 발송: {', '.join(words)}")
 
 
 if __name__ == "__main__":
