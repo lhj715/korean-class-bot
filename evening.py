@@ -3,7 +3,6 @@ import sys
 from datetime import datetime
 import pytz
 from bs4 import BeautifulSoup
-import feedparser
 import random
 import os
 from google import genai as google_genai
@@ -18,7 +17,6 @@ from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID
 KST = pytz.timezone("Asia/Seoul")
 
 BLOG_ID  = "9594jh"
-RSS_URL  = f"https://rss.blog.naver.com/{BLOG_ID}.xml"
 HEADERS  = {
     "User-Agent": "Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
@@ -28,15 +26,27 @@ HEADERS  = {
 
 LITERATURE_KEYWORDS = [
     "해석", "해설", "분석", "줄거리", "주제", "감상",
-    "소설", "시", "수필", "희곡", "문학", "고전",
-    "수능", "내신", "작품", "작가", "서술", "배경",
+    "현대시", "고전시", "시조", "향가", "가사체", "가사 문학", "수필", "희곡", "소설", "문학", "고전",
+    "수능특강", "수능완성", "작품", "작가", "서술", "배경",
+]
+
+NON_LITERATURE = [
+    "학원", "인강", "공부방법", "공부법", "시험일정", "기사 시험",
+    "기숙", "직장인", "자격증", "취업", "경비지도사",
 ]
 
 SUMMARY_PROMPT = """다음은 국어 문학 블로그 포스트 본문이야.
 고등학생에게 텔레그램으로 보낼 학습 자료를 아래 형식으로 정리해줘.
 형식 외 설명은 쓰지 마.
 
+**문장 종결 규칙 (필수)**:
+- `~합니다.`, `~입니다.`, `~예요.`, `~해요.` 같은 격식체·존댓말 종결 절대 금지.
+- `~한다.` 또는 `~함.` 형태로 종결 (둘 중 어느 쪽이든 자연스러운 것 사용, 어느 한쪽 편향 금지).
+
 작품: [제목 / 작가 / 갈래]
+
+【줄거리】
+(3~5줄로 간략하게. 주요 인물·사건·결말 흐름만)
 
 【주제】
 (1~2줄)
@@ -54,7 +64,9 @@ SUMMARY_PROMPT = """다음은 국어 문학 블로그 포스트 본문이야.
 {content}"""
 
 
-def is_literature_post(title):
+def is_literature_post(title: str) -> bool:
+    if any(bl in title for bl in NON_LITERATURE):
+        return False
     return any(kw in title for kw in LITERATURE_KEYWORDS)
 
 
@@ -66,18 +78,41 @@ def is_weekday_kst():
     return True
 
 
-def get_post_list():
-    feed = feedparser.parse(RSS_URL)
+def get_post_list(pages: int = 10) -> list[dict]:
+    """PostTitleListAsync API로 최근 N페이지 글 목록 수집."""
+    import urllib.request
+    import re as _re
+    from urllib.parse import unquote_plus
+
+    api_headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://blog.naver.com/",
+    }
     posts = []
-    for entry in feed.entries:
-        link = entry.get("link", "")
-        log_no = link.rstrip("/").split("/")[-1].split("?")[0]
-        if log_no.isdigit():
-            posts.append({
-                "title": entry.get("title", ""),
-                "log_no": log_no,
-                "published": entry.get("published", ""),
-            })
+    for page in range(1, pages + 1):
+        url = (
+            f"https://blog.naver.com/PostTitleListAsync.naver"
+            f"?blogId={BLOG_ID}&categoryNo=0&currentPage={page}"
+            f"&countPerPage=30&orderType=desc"
+        )
+        try:
+            req = urllib.request.Request(url, headers=api_headers)
+            with urllib.request.urlopen(req, timeout=10) as r:
+                raw = r.read().decode("utf-8")
+            titles  = _re.findall(r'"title":"([^"]+)"', raw)
+            log_nos = _re.findall(r'"logNo":"([^"]+)"', raw)
+            dates   = _re.findall(r'"addDate":"([^"]+)"', raw)
+            for t, n, d in zip(titles, log_nos, dates):
+                posts.append({
+                    "title": unquote_plus(t),
+                    "log_no": n,
+                    "published": d,
+                })
+            if len(titles) < 30:
+                break
+        except Exception as e:
+            print(f"  페이지 {page} 수집 실패: {e}")
+            break
     return posts
 
 
@@ -111,15 +146,24 @@ def summarize(title, content):
     return resp.text.strip()
 
 
-def send_telegram(text):
+def send_telegram(text, retries=3):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     if len(text) > 4096:
         text = text[:4090] + "..."
-    resp = requests.post(url, json={
-        "chat_id": TELEGRAM_CHANNEL_ID,
-        "text": text,
-    }, timeout=15)
-    resp.raise_for_status()
+    import time
+    for attempt in range(retries):
+        try:
+            resp = requests.post(url, json={
+                "chat_id": TELEGRAM_CHANNEL_ID,
+                "text": text,
+            }, timeout=20)
+            resp.raise_for_status()
+            return
+        except Exception as e:
+            if attempt < retries - 1:
+                time.sleep(3)
+            else:
+                raise
 
 
 def main():
