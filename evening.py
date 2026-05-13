@@ -139,11 +139,39 @@ def fetch_post_content(log_no):
 
 def summarize(title, content):
     trimmed = content[:4000]
-    resp = _gemini.models.generate_content(
-        model="models/gemini-flash-lite-latest",
-        contents=SUMMARY_PROMPT.format(content=trimmed)
-    )
-    return resp.text.strip()
+    prompt = SUMMARY_PROMPT.format(content=trimmed)
+    # 1차: Gemini flash-lite (기본)
+    try:
+        resp = _gemini.models.generate_content(
+            model="models/gemini-flash-lite-latest",
+            contents=prompt,
+        )
+        return resp.text.strip()
+    except Exception as e1:
+        print(f"[Gemini flash-lite 실패] {type(e1).__name__}: {str(e1)[:100]}")
+    # 2차: Gemini 2.5 flash (더 큰 모델, 보통 가용성 ↑)
+    try:
+        resp = _gemini.models.generate_content(
+            model="models/gemini-2.5-flash",
+            contents=prompt,
+        )
+        return resp.text.strip()
+    except Exception as e2:
+        print(f"[Gemini 2.5-flash 실패] {type(e2).__name__}: {str(e2)[:100]}")
+    # 3차: Anthropic Claude Haiku 폴백
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=600,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return msg.content[0].text.strip()
+    except Exception as e3:
+        print(f"[Claude Haiku 실패] {type(e3).__name__}: {str(e3)[:100]}")
+    # 모두 실패 — 컨텐츠 첫 300자 요약 대체
+    return trimmed[:300] + ("..." if len(trimmed) > 300 else "")
 
 
 def send_telegram(text, retries=3):
